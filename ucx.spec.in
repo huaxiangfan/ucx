@@ -17,7 +17,7 @@
 
 Name: ucx
 Version: @VERSION@
-Release: 1%{?dist}%{?devel:.devel}
+Release: 1%{?dist}%{?debug:.debug}
 Summary: UCX is a communication library implementing high-performance messaging
 Group: System Environment/Libraries
 
@@ -63,6 +63,9 @@ BuildRequires: xpmem-devel
 %if %{with java}
 BuildRequires: maven
 %endif
+%if "%{debug}" == "1"
+BuildRequires: valgrind-devel
+%endif
 
 %description
 UCX stands for Unified Communication X. UCX provides an optimized communication
@@ -94,10 +97,18 @@ Provides header files and examples for developing with UCX.
 %define _with_arg()   %{expand:%%{?with_%{1}:--with-%{2}}%%{!?with_%{1}:--without-%{2}}}
 %define _enable_arg() %{expand:%%{?with_%{1}:--enable-%{2}}%%{!?with_%{1}:--disable-%{2}}}
 %configure --disable-optimizations \
-           %{!?devel:--disable-logging} \
-           %{!?devel:--disable-debug} \
-           %{!?devel:--disable-assertions} \
-           %{!?devel:--disable-params-check} \
+           %{!?debug:--disable-logging} \
+           %{!?debug:--disable-debug} \
+           %{!?debug:--disable-assertions} \
+           %{!?debug:--disable-params-check} \
+           %{!?debug:--disable-params-check} \
+           %{?debug:--with-valgrind} \
+           %{?debug:--enable-profiling} \
+           %{?debug:--enable-frame-pointer} \
+           %{?debug:--enable-stats} \
+           %{?debug:--enable-fault-injection} \
+           %{?debug:--enable-debug-data} \
+           %{?debug:--enable-mt} \
            %_enable_arg cma cma \
            %_with_arg cuda cuda \
            %_with_arg gdrcopy gdrcopy \
