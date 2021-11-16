@@ -215,9 +215,10 @@ void UcxContext::progress(unsigned count)
 {
     int i = 0;
 
-    while ((i++ < count) && (ucp_worker_progress(_worker) > 0)) {
+    ucp_worker_progress(_worker);
+    do {
         progress_io_message();
-    }
+    } while ((++i < count) && ucp_worker_progress(_worker));
 
     progress_timed_out_conns();
     progress_conn_requests();
