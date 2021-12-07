@@ -65,6 +65,9 @@ ucs_status_t ucp_rndv_process_rts(void *arg, void *data, size_t length,
 
 size_t ucp_tag_rndv_rts_pack(void *dest, void *arg);
 
+void ucp_rndv_req_add_to_cancelled_list(ucp_request_t *sreq,
+                                        ucs_status_t status);
+
 ucs_status_t ucp_tag_rndv_reg_send_buffer(ucp_request_t *sreq);
 
 void ucp_ep_complete_rndv_reqs(ucp_ep_h ep);
