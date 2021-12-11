@@ -824,6 +824,8 @@ void ucp_ep_cleanup_lanes(ucp_ep_h ep)
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
         ep->uct_eps[lane] = NULL;
     }
+
+    ucp_ep_complete_rndv_reqs(ep);
 }
 
 static void ucp_worker_matchq_purge(ucp_tag_frag_match_t *matchq)
@@ -935,7 +937,6 @@ void ucp_ep_disconnected(ucp_ep_h ep, ucs_status_t status, int force)
     ucp_stream_ep_cleanup(ep, status);
     ucp_am_ep_cleanup(ep);
     ucp_ep_cleanup_unexp(ep);
-    ucp_ep_complete_rndv_reqs(ep);
 
     ep->flags &= ~UCP_EP_FLAG_USED;
 
