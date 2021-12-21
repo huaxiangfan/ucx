@@ -421,6 +421,8 @@ void ucp_tag_rndv_cancel(ucp_request_t *sreq)
 {
     if (!(sreq->send.ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED)) {
         if (sreq->flags & UCP_REQUEST_FLAG_RNDV_RTS_SENT) {
+            ucp_rndv_req_add_to_cancelled_list(sreq, UCS_ERR_CANCELED);
+        } else {
             ucp_rndv_complete_send(sreq, UCS_ERR_CANCELED, "rndv_cancel");
         }
     } else {
