@@ -298,6 +298,8 @@ static void uct_ib_async_event_handler(int fd, void *arg)
         level = UCS_LOG_LEVEL_DEBUG;
         break;
     case IBV_EVENT_DEVICE_FATAL:
+        uct_ib_device_async_event_dispatch(dev, event.event_type, 0);
+        /* fallthrough */
     case IBV_EVENT_PORT_ERR:
         snprintf(event_info, sizeof(event_info), "%s on port %d",
                  ibv_event_type_str(event.event_type), event.element.port_num);

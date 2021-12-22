@@ -955,10 +955,13 @@ static int uct_rc_mlx5_ep_clean_rx_cq_cb(uct_rc_mlx5_iface_common_t *iface,
     unsigned count;
 
     if (cqe == NULL) {
-        /* Check that last WQE reached event has arrived */
+        /* Check that last WQE reached event has arrived, or device fatal */
         count = uct_ib_device_async_event_get_count(dev,
                                                     IBV_EVENT_QP_LAST_WQE_REACHED,
-                                                    qp->qp_num);
+                                                    qp->qp_num) +
+                uct_ib_device_async_event_get_count(dev,
+                                                    IBV_EVENT_DEVICE_FATAL,
+                                                    0 /* port_num */);
         return count > 0;
     }
 
