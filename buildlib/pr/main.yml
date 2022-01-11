@@ -1,0 +1,10 @@
+resources:
+  containers:
+    - container: centos7
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7:3
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+
+stages:
+  - stage: io_demo
+    jobs:
+    - template: io_demo/io-demo.yml
