@@ -3,21 +3,7 @@
 
 trigger: none
 pr:
-  branches:
-    include:
-    - intergation3
-  paths:
-    exclude:
-    - .gitignore
-    - .readthedocs.yaml
-    - contrib/pr_merge_check.py
-    - docs/source
-    - docs/CodeStyle.md
-    - docs/LoggingStyle.md
-    - docs/OptimizationStyle.md
-    - README.md
-    - NEWS
-    - AUTHORS
+  - integration3
 
 extends:
   template: pr/main.yml
