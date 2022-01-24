@@ -13,7 +13,7 @@
 #include <ucs/datastruct/khash.h>
 
 
-KHASH_MAP_INIT_INT(uct_rdmacm_cm_cqs, struct ibv_cq*);
+KHASH_MAP_INIT_INT64(uct_rdmacm_cm_cqs, struct ibv_cq*);
 
 
 /**
@@ -46,7 +46,7 @@ ucs_status_t uct_rdmacm_cm_ack_event(struct rdma_cm_event *event);
 ucs_status_t uct_rdmacm_cm_reject(struct rdma_cm_id *id);
 
 ucs_status_t uct_rdmacm_cm_get_cq(uct_rdmacm_cm_t *cm, struct ibv_context *verbs,
-                                  uint32_t pd_key, struct ibv_cq **cq);
+                                  struct ibv_cq **cq);
 
 void uct_rdmacm_cm_cqs_cleanup(uct_rdmacm_cm_t *cm);
 
