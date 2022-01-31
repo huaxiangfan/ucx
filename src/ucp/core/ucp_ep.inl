@@ -182,8 +182,8 @@ static inline void ucp_ep_update_dest_ep_ptr(ucp_ep_h ep, uintptr_t ep_ptr)
 {
     if (ep->flags & UCP_EP_FLAG_DEST_EP) {
         ucs_assertv(ep_ptr == ucp_ep_ext_gen(ep)->dest_ep_ptr,
-                    "ep=%p ep_ptr=0x%lx ep->dest_ep_ptr=0x%lx",
-                    ep, ep_ptr, ucp_ep_ext_gen(ep)->dest_ep_ptr);
+                    "ep=%p flags=0x%x ep_ptr=0x%lx ep->dest_ep_ptr=0x%lx",
+                    ep, ep->flags, ep_ptr, ucp_ep_ext_gen(ep)->dest_ep_ptr);
     }
 
     ucs_assert(ep_ptr != 0);
