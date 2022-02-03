@@ -21,6 +21,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <queue>
 
 #define MAX_LOG_PREFIX_SIZE   64
 
@@ -109,6 +110,8 @@ public:
         size_t        bytes;
         unsigned long evictions;
     } memory_pin_stats_t;
+
+    typedef std::vector<uint8_t> iomsg_buffer_t;
 
     static const size_t rndv_thresh_auto = (size_t)-2;
 
@@ -244,7 +247,7 @@ private:
     std::deque<UcxConnection *> _failed_conns;
     std::list<UcxConnection *>  _disconnecting_conns;
     ucx_request                 *_iomsg_recv_request;
-    std::string                 _iomsg_buffer;
+    iomsg_buffer_t              _iomsg_buffer;
     double                      _connect_timeout;
     size_t                      _rndv_thresh;
 };
@@ -276,6 +279,9 @@ public:
 
     bool recv_data(void *buffer, size_t length, uint32_t sn,
                    UcxCallback* callback = EmptyCallback::get());
+
+    void iomsg_recv_defer(const UcxContext::iomsg_buffer_t &iomsg,
+                          size_t iomsg_length);
 
     void cancel_all();
 
@@ -352,17 +358,18 @@ private:
 
     static unsigned _num_instances;
 
-    UcxContext      &_context;
-    UcxCallback     *_establish_cb;
-    UcxCallback     *_disconnect_cb;
-    uint64_t        _conn_id;
-    uint64_t        _remote_conn_id;
-    char            _log_prefix[MAX_LOG_PREFIX_SIZE];
-    ucp_ep_h        _ep;
-    std::string     _remote_address;
-    void            *_close_request;
-    ucs_list_link_t _all_requests;
-    ucs_status_t    _ucx_status;
+    UcxContext                             &_context;
+    UcxCallback                            *_establish_cb;
+    UcxCallback                            *_disconnect_cb;
+    uint64_t                               _conn_id;
+    uint64_t                               _remote_conn_id;
+    char                                   _log_prefix[MAX_LOG_PREFIX_SIZE];
+    ucp_ep_h                               _ep;
+    std::string                            _remote_address;
+    void                                   *_close_request;
+    ucs_list_link_t                        _all_requests;
+    ucs_status_t                           _ucx_status;
+    std::queue<UcxContext::iomsg_buffer_t> _iomsg_recv_backlog;
 };
 
 #endif
