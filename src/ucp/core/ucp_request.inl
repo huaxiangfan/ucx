@@ -62,12 +62,20 @@
 
 #define ucp_request_complete(_req, _cb, _status, ...) \
     { \
+        /* NOTE: external request can't have RELEASE flag and we */ \
+        /* will never put it into mpool */ \
+        uint32_t _flags; \
+        \
+        ucs_assert(!((_req)->flags & UCP_REQUEST_FLAG_COMPLETED)); \
+        ucs_assert((_status) != UCS_INPROGRESS); \
+        \
+        _flags         = ((_req)->flags |= UCP_REQUEST_FLAG_COMPLETED); \
         (_req)->status = (_status); \
+        \
         if (ucs_likely((_req)->flags & UCP_REQUEST_FLAG_CALLBACK)) { \
             (_req)->_cb((_req) + 1, (_status), ## __VA_ARGS__); \
         } \
-        if (ucs_unlikely(((_req)->flags  |= UCP_REQUEST_FLAG_COMPLETED) & \
-                         UCP_REQUEST_FLAG_RELEASED)) { \
+        if (ucs_unlikely(_flags & UCP_REQUEST_FLAG_RELEASED)) { \
             ucp_request_put(_req); \
         } \
     }
@@ -144,7 +152,8 @@ ucp_request_complete_tag_recv(ucp_worker_h worker, ucp_request_t *req,
      }
 
     UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", status);
-    ucp_request_complete(req, recv.tag.cb, status, &req->recv.tag.info);
+    ucp_request_complete(req, recv.tag.cb, status, &req->recv.tag.info,
+                         req->user_data);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -622,11 +631,25 @@ ucp_send_request_next_am_bw_lane(ucp_request_t *req, int advance)
         ++req->send.msg_proto.am_bw_index;
     }
     am_bw_index = req->send.msg_proto.am_bw_index;
-    
+
     if ((am_bw_index >= UCP_MAX_LANES) ||
         (config->key.am_bw_lanes[am_bw_index] == UCP_NULL_LANE)) {
         req->send.msg_proto.am_bw_index = 0;
     }
+}
+
+static UCS_F_ALWAYS_INLINE ucp_datatype_t
+ucp_request_param_datatype(const ucp_request_param_t *param)
+{
+    return (param->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE) ?
+           param->datatype : ucp_dt_make_contig(1);
+}
+
+static UCS_F_ALWAYS_INLINE void *
+ucp_request_param_user_data(const ucp_request_param_t *param)
+{
+    return (param->op_attr_mask & UCP_OP_ATTR_FIELD_USER_DATA) ?
+           param->user_data : NULL;
 }
 
 static UCS_F_ALWAYS_INLINE uintptr_t ucp_request_get_dest_ep_ptr(ucp_request_t *req)

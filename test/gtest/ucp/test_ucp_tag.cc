@@ -13,6 +13,7 @@ extern "C" {
 #include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_ep.inl>
+#include <ucs/arch/atomic.h>
 }
 
 
@@ -413,3 +414,138 @@ UCS_TEST_P(test_ucp_tag_limits, check_max_short_zcopy_thresh_zero, "ZCOPY_THRESH
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_limits)
+
+
+class test_ucp_tag_nbx : public test_ucp_tag {
+public:
+    void init() {
+        /* forbid zcopy access because it will always fail due to read-only
+         * memory pages (will fail to register memory) */
+        modify_config("ZCOPY_THRESH", "inf");
+        test_ucp_tag::init();
+    }
+
+protected:
+    static const size_t MSG_SIZE;
+    static const ucp_request_param_t null_param;
+
+    static void complete(void *req, void *user_data)
+    {
+        ucs_atomic_add32((volatile uint32_t*)user_data, 1);
+    }
+
+    static void send_callback(void *req, ucs_status_t status, void *user_data)
+    {
+        complete(req, user_data);
+    }
+
+    static void recv_callback(void *req, ucs_status_t status,
+                              const ucp_tag_recv_info_t *info, void *user_data)
+    {
+        ucs_atomic_add32((volatile uint32_t*)user_data, 1);
+    }
+
+    void wait(void *req)
+    {
+        if (req == NULL) {
+            return;
+        }
+
+        ucs_status_t status;
+        do {
+            progress();
+            status = ucp_request_check_status(req);
+            ASSERT_UCS_OK_OR_INPROGRESS(status);
+        } while (status == UCS_INPROGRESS);
+        request_free((request*)req);
+    }
+
+    void
+    test_recv_send(size_t size, const void *send_buffer, void *recv_buffer,
+                   const ucp_request_param_t &sparam = null_param,
+                   const ucp_request_param_t &rparam = null_param)
+    {
+        ucp_request_param_t send_param = sparam;
+        ucp_request_param_t recv_param = rparam;
+
+        ucs_status_ptr_t recv_req = ucp_tag_recv_nbx(receiver().worker(),
+                                                     recv_buffer, size, 0, 0,
+                                                     &recv_param);
+        ASSERT_UCS_PTR_OK(recv_req);
+
+        ucs_status_ptr_t send_req = ucp_tag_send_nbx(sender().ep(), send_buffer,
+                                                     size, 0, &send_param);
+        ASSERT_UCS_PTR_OK(send_req);
+
+        if (!(recv_param.op_attr_mask & UCP_OP_ATTR_FIELD_REQUEST)) {
+            wait((request*)recv_req);
+        }
+
+        if (!(send_param.op_attr_mask & UCP_OP_ATTR_FIELD_REQUEST)) {
+            wait((request*)send_req);
+        }
+    }
+
+    void test_recv_send(size_t size = MSG_SIZE)
+    {
+        std::vector<char> send_buffer(size);
+        std::vector<char> recv_buffer(size);
+        test_recv_send(size, &send_buffer[0], &recv_buffer[0]);
+    }
+};
+
+const size_t test_ucp_tag_nbx::MSG_SIZE  = 4 * UCS_KBYTE * ucs_get_page_size();
+const ucp_request_param_t test_ucp_tag_nbx::null_param = {0};
+
+UCS_TEST_P(test_ucp_tag_nbx, basic)
+{
+    test_recv_send();
+}
+
+UCS_TEST_P(test_ucp_tag_nbx, fallback)
+{
+    /* allocate read-only pages - it force ibv_reg_mr() failure */
+    void *send_buffer = mmap(NULL, MSG_SIZE, PROT_READ,
+                             MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    ASSERT_NE(send_buffer, MAP_FAILED);
+
+    std::vector<char> recv_buffer(MSG_SIZE);
+
+    test_recv_send(MSG_SIZE, send_buffer, &recv_buffer[0]);
+
+    munmap(send_buffer, MSG_SIZE);
+}
+
+UCS_TEST_P(test_ucp_tag_nbx, external_request_free)
+{
+    ucp_request_param_t send_param = {0};
+    ucp_request_param_t recv_param = {0};
+    uint32_t completed             = 0;
+    uint32_t op_attr_mask;
+
+    op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK | UCP_OP_ATTR_FIELD_REQUEST |
+                   UCP_OP_ATTR_FLAG_NO_IMM_CMPL | UCP_OP_ATTR_FIELD_USER_DATA;
+
+    send_param.op_attr_mask = op_attr_mask;
+    recv_param.op_attr_mask = op_attr_mask;
+    send_param.request      = request_alloc();
+    recv_param.request      = request_alloc();
+    send_param.cb.send      = send_callback;
+    recv_param.cb.recv      = recv_callback;
+    send_param.user_data    = &completed;
+    recv_param.user_data    = &completed;
+
+    std::vector<char> send_buffer(MSG_SIZE);
+    std::vector<char> recv_buffer(MSG_SIZE);
+
+    test_recv_send(MSG_SIZE, &send_buffer[0], &recv_buffer[0], send_param,
+                   recv_param);
+    while (completed < 2) {
+        short_progress_loop();
+    }
+
+    request_free((request*)send_param.request);
+    request_free((request*)recv_param.request);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_nbx)
