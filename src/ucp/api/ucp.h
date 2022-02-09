@@ -537,6 +537,7 @@ typedef enum {
     UCP_OP_ATTR_FIELD_USER_DATA     = UCS_BIT(2),  /**< user_data field */
     UCP_OP_ATTR_FIELD_DATATYPE      = UCS_BIT(3),  /**< datatype field */
     UCP_OP_ATTR_FIELD_FLAGS         = UCS_BIT(4),  /**< operation-specific flags */
+    UCP_OP_ATTR_FIELD_MEMH          = UCS_BIT(5),  /**< memory handle field */
 
     UCP_OP_ATTR_FLAG_NO_IMM_CMPL    = UCS_BIT(16), /**< deny immediate completion */
     UCP_OP_ATTR_FLAG_FAST_CMPL      = UCS_BIT(17), /**< expedite local completion,
@@ -1308,6 +1309,16 @@ typedef struct {
                                           Relevant for @a ucp_tag_recv_nbx
                                           function. */
     } recv_info;
+
+    /**
+     * Memory handle for pre-registered buffer.
+     * If the handle is provided, protocols that require registered memory can
+     * skip the registration step. As a result, the communication request
+     * overhead can be reduced and the request can be completed faster.
+     * The memory handle should be obtained by calling @ref ucp_mem_map.
+     */
+    ucp_mem_h memh;
+
 } ucp_request_param_t;
 
 
