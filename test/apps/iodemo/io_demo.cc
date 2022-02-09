@@ -81,6 +81,7 @@ typedef struct {
     size_t                   rndv_thresh;
     unsigned                 progress_count;
     std::vector<const char*> src_addrs;
+    bool                     prereg;
 } options_t;
 
 #define LOG_PREFIX  "[DEMO]"
@@ -94,18 +95,22 @@ typedef struct {
                 << ASSERTV_STR(#_expression)
 
 
-template<class T, bool use_offcache = false>
-class MemoryPool {
+template<class BufferType, bool use_offcache = false>
+class ObjectPool {
 public:
-    MemoryPool(size_t buffer_size, const std::string& name, size_t offcache = 0) :
-        _num_allocated(0), _buffer_size(buffer_size), _name(name) {
-
-        for (size_t i = 0; i < offcache; ++i) {
-            _offcache_queue.push(get_free());
+    ObjectPool(size_t buffer_size, size_t num_offcache,
+               const std::string &name) :
+        _buffer_size(buffer_size),
+        _num_offcache(num_offcache),
+        _num_allocated(0),
+        _name(name)
+    {
+        if (!use_offcache) {
+            ASSERTV(_num_offcache == 0) << "_num_offcache=" << _num_offcache;
         }
     }
 
-    ~MemoryPool() {
+    ~ObjectPool() {
         while (!_offcache_queue.empty()) {
             _free_stack.push_back(_offcache_queue.front());
             _offcache_queue.pop();
@@ -121,8 +126,8 @@ public:
         }
     }
 
-    inline T* get() {
-        T* item = get_free();
+    inline BufferType* get() {
+        BufferType* item = get_free();
 
         if (use_offcache && !_offcache_queue.empty()) {
             _offcache_queue.push(item);
@@ -133,7 +138,7 @@ public:
         return item;
     }
 
-    inline void put(T* item) {
+    inline void put(BufferType* item) {
         _free_stack.push_back(item);
     }
 
@@ -145,13 +150,37 @@ public:
         return _name;
     }
 
-private:
-    inline T* get_free() {
-        T* item;
+protected:
+    size_t buffer_size() const
+    {
+        return _buffer_size;
+    }
 
+    virtual BufferType *construct() = 0;
+
+private:
+    BufferType *get_new()
+    {
+        BufferType *item = construct();
+        _num_allocated++;
+        return item;
+    }
+
+    void fill_offcache_queue()
+    {
+        while (_offcache_queue.size() < _num_offcache) {
+            _offcache_queue.push(get_new());
+        }
+    }
+
+    inline BufferType *get_free()
+    {
+        BufferType *item;
         if (_free_stack.empty()) {
-            item = new T(_buffer_size, *this);
-            _num_allocated++;
+            // Fill the offcache queue on first use. Assume the free stack will
+            // also be empty on the first use.
+            fill_offcache_queue();
+            item = get_new();
         } else {
             item = _free_stack.back();
             _free_stack.pop_back();
@@ -160,11 +189,49 @@ private:
     }
 
 private:
-    std::vector<T*> _free_stack;
-    std::queue<T*>  _offcache_queue;
-    uint32_t        _num_allocated;
-    size_t          _buffer_size;
-    std::string     _name;
+    std::vector<BufferType*> _free_stack;
+    std::queue<BufferType*>  _offcache_queue;
+    size_t                   _buffer_size;
+    const size_t             _num_offcache;
+    uint32_t                 _num_allocated;
+    std::string              _name;
+};
+
+template<class BufferType, bool use_offcache = false>
+class MemoryPool : public ObjectPool<BufferType, use_offcache> {
+public:
+    MemoryPool(size_t buffer_size, const std::string &name,
+               size_t offcache = 0) :
+        ObjectPool<BufferType, use_offcache>::ObjectPool(buffer_size, offcache,
+                                                         name)
+    {
+    }
+
+protected:
+    virtual BufferType *construct()
+    {
+        return new BufferType(this->buffer_size(), *this);
+    }
+};
+
+template<typename BufferType>
+class BufferMemoryPool : public ObjectPool<BufferType, true> {
+public:
+    BufferMemoryPool(size_t buffer_size, size_t offcache,
+                     const std::string &name, UcxContext *context) :
+        ObjectPool<BufferType, true>(buffer_size, offcache, name),
+        _context(context)
+    {
+    }
+
+protected:
+    virtual BufferType *construct()
+    {
+        return new BufferType(this->buffer_size(), *this, _context);
+    }
+
+private:
+    UcxContext *_context;
 };
 
 /**
@@ -336,25 +403,49 @@ protected:
 
     class Buffer {
     public:
-        Buffer(size_t size, MemoryPool<Buffer, true>& pool) :
+        Buffer(size_t size, BufferMemoryPool<Buffer> &pool,
+               UcxContext *map_context) :
             _capacity(size),
             _buffer(UcxContext::memalign(ALIGNMENT, size, pool.name().c_str())),
-            _size(0), _pool(pool) {
+            _size(0),
+            _pool(pool),
+            _map_context(map_context)
+        {
             if (_buffer == NULL) {
                 throw std::bad_alloc();
             }
+
+            if (map_context != NULL) {
+                if (!map_context->map_buffer(size, _buffer, &_memh)) {
+                    LOG << "ERROR: Failed to map buffer " << _buffer << " size "
+                        << size;
+                    throw std::bad_alloc();
+                }
+            } else {
+                _memh = NULL;
+            }
         }
 
-        ~Buffer() {
+        ~Buffer()
+        {
+            if ((_memh != NULL) && !_map_context->unmap_buffer(_memh)) {
+                LOG << "WARNING: Failed to unmap buffer" << _buffer;
+            }
             UcxContext::free(_buffer);
         }
 
-        void release() {
+        void release()
+        {
             _pool.put(this);
         }
 
         inline void *buffer(size_t offset = 0) const {
             return (uint8_t*)_buffer + offset;
+        }
+
+        inline ucp_mem_h memh() const
+        {
+            return _memh;
         }
 
         inline void resize(size_t size) {
@@ -370,9 +461,11 @@ protected:
         const size_t         _capacity;
 
     private:
-        void*                     _buffer;
-        size_t                    _size;
-        MemoryPool<Buffer, true>& _pool;
+        void*                    _buffer;
+        size_t                   _size;
+        BufferMemoryPool<Buffer> &_pool;
+        UcxContext               *_map_context;
+        ucp_mem_h                _memh;
     };
 
     class BufferIov {
@@ -395,7 +488,7 @@ protected:
             return _data_size;
         }
 
-        void init(size_t data_size, MemoryPool<Buffer, true> &chunk_pool,
+        void init(size_t data_size, BufferMemoryPool<Buffer> &chunk_pool,
                   uint32_t sn, uint64_t conn_id, bool validate)
         {
             assert(_iov.empty());
@@ -577,16 +670,17 @@ protected:
         _status = TERMINATE_SIGNALED;
     }
 
-    P2pDemoCommon(const options_t& test_opts, uint32_t iov_buf_filler) :
+    P2pDemoCommon(const options_t &test_opts, uint32_t iov_buf_filler) :
         UcxContext(test_opts.iomsg_size, test_opts.connect_timeout,
                    test_opts.rndv_thresh),
         _test_opts(test_opts),
         _io_msg_pool(test_opts.iomsg_size, "io messages"),
         _send_callback_pool(0, "send callbacks"),
         _data_buffers_pool(get_chunk_cnt(test_opts.max_data_size,
-                                         test_opts.chunk_size), "data iovs"),
-        _data_chunks_pool(test_opts.chunk_size, "data chunks",
-                          test_opts.num_offcache_buffers),
+                                         test_opts.chunk_size),
+                           "data iovs"),
+        _data_chunks_pool(test_opts.chunk_size, test_opts.num_offcache_buffers,
+                          "data chunks", test_opts.prereg ? this : NULL),
         _iov_buf_filler(iov_buf_filler)
     {
         _status                  = OK;
@@ -628,9 +722,11 @@ protected:
 
         for (size_t i = 0; i < iov_size; ++i) {
             if (send_recv_data == XFER_TYPE_SEND) {
-                conn->send_data(iov[i].buffer(), iov[i].size(), sn, callback);
+                conn->send_data(iov[i].buffer(), iov[i].size(), iov[i].memh(),
+                                sn, callback);
             } else {
-                conn->recv_data(iov[i].buffer(), iov[i].size(), sn, callback);
+                conn->recv_data(iov[i].buffer(), iov[i].size(), iov[i].memh(),
+                                sn, callback);
             }
         }
     }
@@ -727,7 +823,7 @@ private:
         /* send IO_READ_COMP as a data since the transaction must be matched
          * by sn on receiver side */
         if (msg->msg()->op == IO_READ_COMP) {
-            return conn->send_data(msg->buffer(), opts().iomsg_size,
+            return conn->send_data(msg->buffer(), opts().iomsg_size, NULL,
                                    msg->msg()->sn, msg);
         } else {
             return conn->send_io_message(msg->buffer(), opts().iomsg_size, msg);
@@ -739,7 +835,7 @@ protected:
     MemoryPool<IoMessage>            _io_msg_pool;
     MemoryPool<SendCompleteCallback> _send_callback_pool;
     MemoryPool<BufferIov>            _data_buffers_pool;
-    MemoryPool<Buffer, true>         _data_chunks_pool;
+    BufferMemoryPool<Buffer>         _data_chunks_pool;
     static status_t                  _status;
     const uint32_t                   _iov_buf_filler;
 };
@@ -1317,7 +1413,8 @@ public:
 
         r->init(this, server_index, sn, server_info.conn->id(), validate, iov);
         recv_data(server_info.conn, *iov, sn, r);
-        server_info.conn->recv_data(r->buffer(), opts().iomsg_size, sn, r);
+        server_info.conn->recv_data(r->buffer(), opts().iomsg_size, NULL, sn,
+                                    r);
 
         return data_size;
     }
@@ -1959,7 +2056,7 @@ private:
             log << " latency:" << latency_usec << "usec";
         }
 
-        log << " buffers:" << _data_buffers_pool.allocated();
+        log << " buffers:" << _data_chunks_pool.allocated();
     }
 
     inline void check_time_limit(double current_time) {
@@ -2157,9 +2254,10 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->debug_timeout         = false;
     test_opts->rndv_thresh           = UcxContext::rndv_thresh_auto;
     test_opts->progress_count        = 1;
+    test_opts->prereg                = false;
 
     while ((c = getopt(argc, argv,
-                       "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqDHP:L:R:C:I:")) != -1) {
+                       "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqDHP:L:R:C:I:z")) != -1) {
         switch (c) {
         case 'p':
             test_opts->port_num = atoi(optarg);
@@ -2292,6 +2390,9 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
         case 'I':
             test_opts->src_addrs.push_back(optarg);
             break;
+        case 'z':
+            test_opts->prereg = true;
+            break;
         case 'h':
         default:
             std::cout << "Usage: io_demo [options] [server_address]" << std::endl;
@@ -2329,6 +2430,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
             std::cout << "" << std::endl;
             std::cout << "  -C <progress_count>        Maximal number of consecutive ucp_worker_progress invocations" << std::endl;
             std::cout << "  -I <src_addr>              Set source IP address to select network interface on client side" << std::endl;
+            std::cout << "  -z                         Enable pre-register buffers for zero-copy" << std::endl;
             return -1;
         }
     }
