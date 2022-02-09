@@ -55,6 +55,13 @@
    obj:*libcuda*.so*
 }
 {
+   fun:gdr_open
+   Memcheck:Param
+   ioctl(generic)
+   fun:ioctl
+   fun:gdr_open
+}
+{
    gdr_get_info_ioctl
    Memcheck:Param
    ioctl(generic)
@@ -170,13 +177,11 @@
    fun:ibv_get_device_list
 }
 {
-   rdmacm_verbs_open_device
+   verbs_open_device
    Memcheck:Leak
    match-leak-kinds: possible
    ...
    fun:verbs_open_device
-   ...
-   fun:rdma_bind_addr
 }
 {
    uct_ib_iface_prepare_rx_wrs_val
@@ -230,4 +235,99 @@
    uct_rc_verbs_iface_post_recv_common_cond
    Memcheck:Cond
    fun:uct_rc_verbs_iface_post_recv_common
+}
+{
+   gdrcopy_ioctl
+   Memcheck:Param
+   ioctl(generic)
+   fun:ioctl
+   fun:gdr_pin_buffer
+}
+{
+   gdr_map
+   Memcheck:Cond
+   fun:gdr_map
+}
+{
+   gdr_copy_to_mapping_cond
+   Memcheck:Cond
+   ...
+   fun:gdr_copy_to_mapping
+}
+{
+   fun:gdr_copy_from_mapping_cond
+   Memcheck:Cond
+   ...
+   fun:gdr_copy_from_mapping
+}
+{
+   gdr_copy_to_mapping_value8
+   Memcheck:Value8
+   ...
+   fun:gdr_copy_to_mapping
+}
+{
+   gdr_copy_from_mapping_value8
+   Memcheck:Value8
+   ...
+   fun:gdr_copy_from_mapping
+}
+{
+   gdr_unmap
+   Memcheck:Cond
+   fun:gdr_unmap
+}
+{
+    is_cuda_supported_unint_access
+    Memcheck:Param
+    ioctl(generic)
+    fun:ioctl
+    ...
+    fun:cuDeviceTotalMem_v2
+    ...
+    fun:cudaGetDeviceCount
+}
+{
+   rdmacm_event_channel
+   Memcheck:Leak
+   ...
+   fun:rdma_create_event_channel
+}
+{
+   rdmacm_bind_addr
+   Memcheck:Leak
+   ...
+   fun:rdma_bind_addr
+}
+{
+   xpmem_get
+   Memcheck:Cond
+   fun:xpmem_get
+}
+{
+   libc_resolv_leak
+   Memcheck:Leak
+   ...
+   fun:__resolv_conf_allocate
+   fun:__resolv_conf_load
+   ...
+   fun:__resolv_context_get
+}
+{
+   libnl_trans
+   Memcheck:Leak
+   ...
+   fun:__trans_list_add
+}
+{
+   ibv_cmd_create_srq
+   Memcheck:Cond
+   ...
+   fun:ibv_cmd_create_srq
+}
+{
+   ibv_poll_cq
+   Memcheck:Cond
+   obj:*libmlx5*
+   fun:ibv_poll_cq
 }
