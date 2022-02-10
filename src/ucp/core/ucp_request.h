@@ -39,6 +39,7 @@ enum {
     UCP_REQUEST_FLAG_CALLBACK             = UCS_BIT(6),
     UCP_REQUEST_FLAG_RECV                 = UCS_BIT(7),
     UCP_REQUEST_FLAG_SYNC                 = UCS_BIT(8),
+    UCP_REQUEST_FLAG_USER_MEMH            = UCS_BIT(9),
     UCP_REQUEST_FLAG_OFFLOADED            = UCS_BIT(10),
     UCP_REQUEST_FLAG_BLOCK_OFFLOAD        = UCS_BIT(11),
     UCP_REQUEST_FLAG_STREAM_RECV_WAITALL  = UCS_BIT(12),
@@ -284,6 +285,10 @@ struct ucp_request {
                     ucp_tag_recv_info_t     info;     /* Completion info to fill */
                     ssize_t                 remaining; /* How much more data to be received */
 
+                    /* User-defined memory handle supplied to ucp_tag_recv_nbx,
+                       valid if UCP_REQUEST_FLAG_USER_MEMH is set */
+                    ucp_mem_h               user_memh;
+
                     /* Can use union, because rdesc is used in expected flow,
                      * while non_contig_buf is used in unexpected flow only. */
                     union {
@@ -383,19 +388,21 @@ extern ucs_mpool_ops_t ucp_rndv_get_mpool_ops;
 int ucp_request_pending_add(ucp_request_t *req, ucs_status_t *req_status,
                             unsigned pending_flags);
 
-ucs_status_t ucp_request_memory_reg(ucp_context_t *context, ucp_md_map_t md_map,
-                                    void *buffer, size_t length, ucp_datatype_t datatype,
-                                    ucp_dt_state_t *state, ucs_memory_type_t mem_type,
-                                    ucp_request_t *req_dbg, unsigned uct_flags);
+ucs_status_t
+ucp_request_memory_reg(ucp_context_t *context, ucp_md_map_t md_map,
+                       void *buffer, size_t length, ucp_datatype_t datatype,
+                       ucp_dt_state_t *state, ucs_memory_type_t mem_type,
+                       ucp_request_t *req, unsigned uct_flags);
 
 void ucp_request_memory_dereg(ucp_context_t *context, ucp_datatype_t datatype,
-                              ucp_dt_state_t *state, ucp_request_t *req_dbg);
+                              ucp_dt_state_t *state, ucp_request_t *req);
 
 ucs_status_t ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
                                     size_t zcopy_thresh, size_t zcopy_max,
                                     size_t dt_count,
                                     const ucp_ep_msg_config_t* msg_config,
-                                    const ucp_request_send_proto_t *proto);
+                                    const ucp_request_send_proto_t *proto,
+                                    const ucp_request_param_t *param);
 
 /* Fast-forward to data end */
 void ucp_request_handle_send_error(ucp_request_t *req, ucs_status_t status);

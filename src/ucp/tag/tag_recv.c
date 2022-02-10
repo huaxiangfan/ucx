@@ -161,6 +161,12 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
         req->recv.tag.info.sender_tag = 0;
     }
 
+    status = ucp_recv_request_set_user_memh(req, param);
+    if (status != UCS_OK) {
+        ucp_request_put_param(param, req);
+        return UCS_STATUS_PTR(status);
+    }
+
     if (ucs_unlikely(rdesc == NULL)) {
         /* If not found on unexpected, wait until it arrives.
          * If was found but need this receive request for later completion, save it */
