@@ -197,7 +197,7 @@ unsigned uct_rc_mlx5_iface_progress(void *arg)
     uct_rc_mlx5_iface_common_t *iface = arg;
 
     if (((iface->keepalive.iter_count++ %
-          UCP_WORKER_KEEPALIVE_ITER_SKIP) != 0) &&
+          UCP_WORKER_KEEPALIVE_ITER_SKIP) == 0) &&
         (iface->config.ka_interval != 0)) {
         uct_rc_mlx5_common_ka_progress(iface);
     }
