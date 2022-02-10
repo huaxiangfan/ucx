@@ -5,6 +5,11 @@ resources:
       options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
 
 stages:
+  - stage: test
+    jobs:
+    - template: test.yml
+
   - stage: io_demo
     jobs:
     - template: io_demo/io-demo.yml
+    dependsOn: []
