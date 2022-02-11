@@ -15,7 +15,7 @@
 
 
 ucs_config_field_t uct_tcp_sockcm_config_table[] = {
-  {"TCP_", "", NULL,
+  {"", "", NULL,
    ucs_offsetof(uct_tcp_sockcm_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_cm_config_table)},
 
   {"PRIV_DATA_LEN", "2048",
