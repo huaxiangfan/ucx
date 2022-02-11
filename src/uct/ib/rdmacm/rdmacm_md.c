@@ -24,7 +24,7 @@ static ucs_config_field_t uct_rdmacm_md_config_table[] = {
 };
 
 static ucs_config_field_t uct_rdmacm_cm_config_table[] = {
-    {"CM_", "", NULL,
+    {"", "", NULL,
      ucs_offsetof(uct_rdmacm_cm_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_cm_config_table)},
 
     {"SOURCE_ADDRESS", "",
@@ -264,7 +264,7 @@ uct_component_t uct_rdmacm_component = {
     },
     .cm_config          = {
         .name           = "RDMA-CM connection manager",
-        .prefix         = "RDMA_CM_",
+        .prefix         = "RDMACM_",
         .table          = uct_rdmacm_cm_config_table,
         .size           = sizeof(uct_rdmacm_cm_config_t),
     },
