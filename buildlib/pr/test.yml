@@ -1,0 +1,47 @@
+jobs:
+  - job: test
+    displayName: Test on RoCE
+
+    pool:
+      name: MLNX
+      demands: ucx_roce -equals yes
+
+    steps:
+      - checkout: self
+        clean: true
+
+      - bash: |
+          set -eEx
+          ./autogen.sh
+          ./contrib/configure-devel --prefix=$(pwd)/install
+          make -j`nproc` install
+        name: build
+
+      - bash: |
+          set -eEx
+          ibv_devinfo -v
+
+          # Test on all active devices
+          count=0
+          for ibdev in $(ls /sys/class/infiniband)
+          do
+            port=1
+            ibv_devinfo -d ${ibdev} -i ${port} | grep 'PORT_ACTIVE' || continue
+
+            export GTEST_FILTER='rcx/test_ucp_tag_nbx*'
+            export UCX_NET_DEVICES="${ibdev}:${port}"
+
+            # Run the test
+            make -C test/gtest test
+
+            # Run the test with valgrind
+            make -C test/gtest test_valgrind
+
+            count=$((count+1))
+          done
+
+          if [ ${count} -eq 0 ]; then
+            echo "No active devices found"
+            exit 1
+          fi
+        name: gtest

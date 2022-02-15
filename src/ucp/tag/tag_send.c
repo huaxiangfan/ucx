@@ -366,8 +366,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
 
     if (param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) {
         cb             = param->cb.send;
-        req->user_data = param->op_attr_mask & UCP_OP_ATTR_FIELD_USER_DATA ?
-                         param->user_data : NULL;
+        req->user_data = ucp_request_param_user_data(param);
     } else {
         cb = NULL;
     }
