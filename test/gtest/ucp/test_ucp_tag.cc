@@ -462,11 +462,21 @@ protected:
 
     void
     test_recv_send(size_t size, const void *send_buffer, void *recv_buffer,
+                   bool prereg = false,
                    const ucp_request_param_t &sparam = null_param,
                    const ucp_request_param_t &rparam = null_param)
     {
         ucp_request_param_t send_param = sparam;
         ucp_request_param_t recv_param = rparam;
+
+        if (prereg) {
+            send_param.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
+            send_param.memh = sender().mem_map(const_cast<void*>(send_buffer),
+                                               size);
+
+            recv_param.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
+            recv_param.memh          = receiver().mem_map(recv_buffer, size);
+        }
 
         ucs_status_ptr_t recv_req = ucp_tag_recv_nbx(receiver().worker(),
                                                      recv_buffer, size, 0, 0,
@@ -484,13 +494,18 @@ protected:
         if (!(send_param.op_attr_mask & UCP_OP_ATTR_FIELD_REQUEST)) {
             wait((request*)send_req);
         }
+
+        if (prereg) {
+            sender().mem_unmap(send_param.memh);
+            receiver().mem_unmap(recv_param.memh);
+        }
     }
 
-    void test_recv_send(size_t size = MSG_SIZE)
+    void test_recv_send(size_t size = MSG_SIZE, bool prereg = false)
     {
         std::vector<char> send_buffer(size);
         std::vector<char> recv_buffer(size);
-        test_recv_send(size, &send_buffer[0], &recv_buffer[0]);
+        test_recv_send(size, &send_buffer[0], &recv_buffer[0], prereg);
     }
 };
 
@@ -500,6 +515,17 @@ const ucp_request_param_t test_ucp_tag_nbx::null_param = {0};
 UCS_TEST_P(test_ucp_tag_nbx, basic)
 {
     test_recv_send();
+}
+
+UCS_TEST_P(test_ucp_tag_nbx, eager_zcopy_prereg, "ZCOPY_THRESH=0",
+           "RNDV_THRESH=inf")
+{
+    test_recv_send(4 * UCS_KBYTE, true);
+}
+
+UCS_TEST_P(test_ucp_tag_nbx, rndv_prereg, "RNDV_THRESH=0")
+{
+    test_recv_send(64 * UCS_KBYTE, true);
 }
 
 UCS_TEST_P(test_ucp_tag_nbx, fallback)
@@ -538,8 +564,8 @@ UCS_TEST_P(test_ucp_tag_nbx, external_request_free)
     std::vector<char> send_buffer(MSG_SIZE);
     std::vector<char> recv_buffer(MSG_SIZE);
 
-    test_recv_send(MSG_SIZE, &send_buffer[0], &recv_buffer[0], send_param,
-                   recv_param);
+    test_recv_send(MSG_SIZE, &send_buffer[0], &recv_buffer[0], false,
+                   send_param, recv_param);
     while (completed < 2) {
         short_progress_loop();
     }
