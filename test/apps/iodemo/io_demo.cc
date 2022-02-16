@@ -80,7 +80,7 @@ typedef struct {
     bool                     debug_timeout;
     size_t                   rndv_thresh;
     unsigned                 progress_count;
-    const char*              src_addr;
+    std::vector<const char*> src_addrs;
 } options_t;
 
 #define LOG_PREFIX  "[DEMO]"
@@ -1565,6 +1565,7 @@ public:
         const char *server = opts().servers[server_index];
         struct sockaddr_storage *src_addr_p = NULL;
         struct sockaddr_storage dst_addr, src_addr;
+        uint32_t addr_index;
         std::string server_addr;
         int port_num;
         bool ret;
@@ -1586,8 +1587,11 @@ public:
             abort();
         }
 
-        if (opts().src_addr != NULL) {
-            ret = set_sockaddr(opts().src_addr, 0, (struct sockaddr*)&src_addr);
+        if (!opts().src_addrs.empty()) {
+            addr_index = IoDemoRandom::rand(0U,
+                               (uint32_t)(opts().src_addrs.size() - 1));
+            ret = set_sockaddr(opts().src_addrs[addr_index], 0,
+                               (struct sockaddr*)&src_addr);
             if (ret != true) {
                 abort();
             }
@@ -2153,7 +2157,6 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->debug_timeout         = false;
     test_opts->rndv_thresh           = UcxContext::rndv_thresh_auto;
     test_opts->progress_count        = 1;
-    test_opts->src_addr              = NULL;
 
     while ((c = getopt(argc, argv,
                        "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqDHP:L:R:C:I:")) != -1) {
@@ -2287,7 +2290,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
             test_opts->rndv_thresh = strtol(optarg, NULL, 0);
             break;
         case 'I':
-            test_opts->src_addr = optarg;
+            test_opts->src_addrs.push_back(optarg);
             break;
         case 'h':
         default:
