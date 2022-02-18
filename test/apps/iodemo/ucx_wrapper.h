@@ -140,6 +140,10 @@ public:
 
     static void free(void *ptr);
 
+    bool map_buffer(size_t length, void *address, ucp_mem_h *memh);
+
+    bool unmap_buffer(ucp_mem_h memh);
+
 protected:
 
     // Called when new IO message is received
@@ -276,11 +280,11 @@ public:
     bool send_io_message(const void *buffer, size_t length,
                          UcxCallback* callback = EmptyCallback::get());
 
-    bool send_data(const void *buffer, size_t length, uint32_t sn,
-                   UcxCallback* callback = EmptyCallback::get());
+    bool send_data(const void *buffer, size_t length, ucp_mem_h memh,
+                   uint32_t sn, UcxCallback *callback = EmptyCallback::get());
 
-    bool recv_data(void *buffer, size_t length, uint32_t sn,
-                   UcxCallback* callback = EmptyCallback::get());
+    bool recv_data(void *buffer, size_t length, ucp_mem_h memh, uint32_t sn,
+                   UcxCallback *callback = EmptyCallback::get());
 
     void iomsg_recv_defer(const UcxContext::iomsg_buffer_t &iomsg,
                           size_t iomsg_length);
@@ -344,8 +348,8 @@ private:
 
     void established(ucs_status_t status);
 
-    bool send_common(const void *buffer, size_t length, ucp_tag_t tag,
-                     UcxCallback* callback);
+    bool send_common(const void *buffer, size_t length, ucp_mem_h memh,
+                     ucp_tag_t tag, UcxCallback *callback);
 
     void request_started(ucx_request *r);
 
