@@ -303,6 +303,9 @@ typedef struct ucp_ep_config {
         const ucp_request_send_proto_t   *reply_proto;
     } am_u;
 
+    /* Bitmap of preregistration for am_bw lanes */
+    ucp_md_map_t                  am_bw_prereg_md_map;
+
 } ucp_ep_config_t;
 
 

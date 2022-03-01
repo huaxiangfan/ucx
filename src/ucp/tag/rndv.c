@@ -344,7 +344,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_rtr, (self),
     return status;
 }
 
-ucs_status_t ucp_tag_rndv_reg_send_buffer(ucp_request_t *sreq)
+ucs_status_t ucp_tag_rndv_reg_send_buffer(ucp_request_t *sreq,
+                                          const ucp_request_param_t *param)
 {
     ucp_ep_h ep = sreq->send.ep;
     ucp_md_map_t md_map;
@@ -356,6 +357,11 @@ ucs_status_t ucp_tag_rndv_reg_send_buffer(ucp_request_t *sreq)
 
         /* register a contiguous buffer for rma_get */
         md_map = ucp_ep_config(ep)->key.rma_bw_md_map;
+
+        status = ucp_send_request_set_user_memh(sreq, md_map, param);
+        if (status != UCS_OK) {
+            return status;
+        }
 
         /* Pass UCT_MD_MEM_FLAG_HIDE_ERRORS flag, because registration may fail
          * if md does not support send memory type (e.g. CUDA memory). In this
@@ -371,7 +377,8 @@ ucs_status_t ucp_tag_rndv_reg_send_buffer(ucp_request_t *sreq)
     return UCS_OK;
 }
 
-ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
+ucs_status_t
+ucp_tag_send_start_rndv(ucp_request_t *sreq, const ucp_request_param_t *param)
 {
     ucp_ep_h ep = sreq->send.ep;
     ucp_worker_h worker = ep->worker;
@@ -392,11 +399,11 @@ ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
     }
 
     if (ucp_ep_is_tag_offload_enabled(ucp_ep_config(ep))) {
-        status = ucp_tag_offload_start_rndv(sreq);
+        status = ucp_tag_offload_start_rndv(sreq, param);
     } else {
         ucs_assert(sreq->send.lane == ucp_ep_get_am_lane(ep));
         sreq->send.uct.func = ucp_proto_progress_rndv_rts;
-        status              = ucp_tag_rndv_reg_send_buffer(sreq);
+        status              = ucp_tag_rndv_reg_send_buffer(sreq, param);
     }
 
     /* add the rndv send request to a hash on the worker. the key is a unique
@@ -1209,7 +1216,18 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr, rts_seq),
                 goto out;
             }
         }
-        /* put protocol is allowed - register receive buffer memory for rma */
+
+        if (rreq->flags & UCP_REQUEST_FLAG_USER_MEMH) {
+            /* At this point we know the datatype is contig */
+            ucp_request_init_dt_reg_from_memh(rreq,
+                                              ep_config->key.rma_bw_md_map,
+                                              rreq->recv.tag.user_memh,
+                                              &rreq->recv.state.dt.contig);
+        }
+
+        /* register receive buffer for
+         * put protocol (or) pipeline rndv for non-host memory type
+         */
         ucs_assert(rndv_rts_hdr->size <= rreq->recv.length);
         ucp_request_recv_buffer_reg(rreq, ep_config->key.rma_bw_md_map,
                                     rndv_rts_hdr->size);

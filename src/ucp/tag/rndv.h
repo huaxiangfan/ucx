@@ -47,7 +47,8 @@ typedef struct {
 } UCS_S_PACKED ucp_rndv_data_hdr_t;
 
 
-ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *req);
+ucs_status_t
+ucp_tag_send_start_rndv(ucp_request_t *req, const ucp_request_param_t *param);
 
 void ucp_tag_rndv_cancel(ucp_request_t *sreq);
 
@@ -68,7 +69,8 @@ size_t ucp_tag_rndv_rts_pack(void *dest, void *arg);
 void ucp_rndv_req_add_to_cancelled_list(ucp_request_t *sreq,
                                         ucs_status_t status);
 
-ucs_status_t ucp_tag_rndv_reg_send_buffer(ucp_request_t *sreq);
+ucs_status_t ucp_tag_rndv_reg_send_buffer(ucp_request_t *sreq,
+                                          const ucp_request_param_t *param);
 
 void ucp_ep_complete_rndv_reqs(ucp_ep_h ep);
 

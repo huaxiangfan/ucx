@@ -380,12 +380,13 @@ ucp_am_send_req(ucp_request_t *req, size_t count,
     size_t zcopy_thresh = ucp_proto_get_zcopy_threshold(req, msg_config,
                                                         count, SIZE_MAX);
     ssize_t max_short   = ucp_am_get_short_max(req, msg_config);
+    ucp_request_param_t param = {0};
     ucs_status_t status;
     
     status = ucp_request_send_start(req, max_short, 
                                     zcopy_thresh, SIZE_MAX,
                                     count, msg_config,
-                                    proto);
+                                    proto, &param);
     if (status != UCS_OK) {
        return UCS_STATUS_PTR(status);
     }

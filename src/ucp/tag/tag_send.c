@@ -50,7 +50,7 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
                  const ucp_ep_msg_config_t* msg_config,
                  size_t rndv_rma_thresh, size_t rndv_am_thresh,
                  ucp_send_nbx_callback_t cb, const ucp_request_send_proto_t *proto,
-                 int enable_zcopy)
+                 int enable_zcopy, const ucp_request_param_t *param)
 {
     size_t rndv_thresh  = ucp_tag_get_rndv_threshold(req, dt_count,
                                                      msg_config->max_iov,
@@ -75,12 +75,12 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
                   max_short, rndv_thresh, zcopy_thresh, enable_zcopy);
 
     status = ucp_request_send_start(req, -1, zcopy_thresh, rndv_thresh,
-                                    dt_count, msg_config, proto);
+                                    dt_count, msg_config, proto, param);
     if (ucs_unlikely(status != UCS_OK)) {
         if (status == UCS_ERR_NO_PROGRESS) {
             /* RMA/AM rendezvous */
             ucs_assert(req->send.length >= rndv_thresh);
-            status = ucp_tag_send_start_rndv(req);
+            status = ucp_tag_send_start_rndv(req, param);
             if (status != UCS_OK) {
                 return UCS_STATUS_PTR(status);
             }
@@ -258,6 +258,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nb,
                  ucp_ep_h ep, const void *buffer, size_t count,
                  uintptr_t datatype, ucp_tag_t tag, ucp_send_callback_t cb)
 {
+    ucp_request_param_t param = {0};
     ucp_request_t *req;
     ucs_status_ptr_t ret;
     ucs_status_t status;
@@ -295,7 +296,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nb,
                            ucp_ep_config(ep)->tag.rndv.rma_thresh,
                            ucp_ep_config(ep)->tag.rndv.am_thresh,
                            (ucp_send_nbx_callback_t)cb,
-                           ucp_ep_config(ep)->tag.sync_proto, 1);
+                           ucp_ep_config(ep)->tag.sync_proto, 1, &param);
 out:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
     return ret;
@@ -384,7 +385,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
     ret = ucp_tag_send_req(req, count, &ucp_ep_config(ep)->tag.eager,
                            rndv_rma_thresh, rndv_am_thresh,
                            cb, ucp_ep_config(ep)->tag.proto,
-                           !(param->op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL));
+                           !(param->op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL),
+                           param);
 
 out:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);

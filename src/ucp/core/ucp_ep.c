@@ -1610,6 +1610,28 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
         }
     }
 
+    /* Memory domains of lanes that require registration and support AM_ZCOPY */
+    for (i = 0; (i < config->key.num_lanes) &&
+                (config->key.am_bw_lanes[i] != UCP_NULL_LANE);
+         ++i) {
+        lane = config->key.am_bw_lanes[i];
+        if (config->md_index[lane] == UCP_NULL_RESOURCE) {
+            continue;
+        }
+
+        md_attr = &context->tl_mds[config->md_index[lane]].attr;
+        if (!ucs_test_all_flags(md_attr->cap.flags,
+                                UCT_MD_FLAG_REG | UCT_MD_FLAG_NEED_MEMH)) {
+            continue;
+        }
+
+        rsc_index  = config->key.lanes[lane].rsc_index;
+        iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
+        if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_ZCOPY) {
+            config->am_bw_prereg_md_map |= UCS_BIT(config->md_index[lane]);
+        }
+    }
+
     /* configuration for rndv */
     get_zcopy_lane_count = 0;
     put_zcopy_lane_count = 0;
@@ -1695,8 +1717,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     /* Rkey ptr */
     if (key->rkey_ptr_lane != UCP_NULL_LANE) {
         lane      = key->rkey_ptr_lane;
-        rsc_index = config->key.lanes[lane].rsc_index;
-        md_attr   = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
+        md_attr   = &context->tl_mds[config->md_index[lane]].attr;
         ucs_assert_always(md_attr->cap.flags & UCT_MD_FLAG_RKEY_PTR);
 
         config->tag.rndv.rkey_ptr_dst_mds =
@@ -1752,7 +1773,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
         rsc_index   = config->key.lanes[lane].rsc_index;
         if (rsc_index != UCP_NULL_RESOURCE) {
             iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
-            md_attr    = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
+            md_attr    = &context->tl_mds[config->md_index[lane]].attr;
             ucp_ep_config_init_attrs(worker, rsc_index, &config->am,
                                      iface_attr->cap.am.max_short,
                                      iface_attr->cap.am.max_bcopy,
