@@ -185,15 +185,11 @@ static khash_t(ucs_signal_orig_action) ucs_signal_orig_action_map;
 
 static ucs_recursive_spinlock_t ucs_kh_lock;
 
-static int ucs_debug_initialized = 0;
-
 #ifdef HAVE_CPLUS_DEMANGLE
 extern char *cplus_demangle(const char *, int);
 #endif
 
 static int ucs_debug_backtrace_is_excluded(void *address, const char *symbol);
-static int orig_sigaction(int signum, const struct sigaction *act,
-                          struct sigaction *oact);
 
 
 static char *ucs_debug_strdup(const char *str)
@@ -928,7 +924,7 @@ static void ucs_error_freeze(const char *message)
 
     /* restore original SIGINT handler to allow termitate process via Ctrl+C */
     sigemptyset(&sigact.sa_mask);
-    orig_sigaction(SIGINT, &sigact, NULL);
+    sigaction(SIGINT, &sigact, NULL);
 
     ucs_debug_stop_other_threads();
 
@@ -1114,81 +1110,6 @@ void ucs_handle_error(const char *message)
     }
 }
 
-static int ucs_debug_is_error_signal(int signum)
-{
-    khiter_t hash_it;
-    int result;
-
-    if (!ucs_global_opts.handle_errors) {
-        return 0;
-    }
-
-    /* If this signal is error, but was disabled. */
-    ucs_recursive_spin_lock(&ucs_kh_lock);
-    hash_it = kh_get(ucs_signal_orig_action, &ucs_signal_orig_action_map, signum);
-    result = (hash_it != kh_end(&ucs_signal_orig_action_map));
-    ucs_recursive_spin_unlock(&ucs_kh_lock);
-    return result;
-}
-
-static void* ucs_debug_get_orig_func(const char *symbol, void *replacement)
-{
-    void *func_ptr;
-
-    func_ptr = dlsym(RTLD_NEXT, symbol);
-    if (func_ptr == NULL) {
-        func_ptr = dlsym(RTLD_DEFAULT, symbol);
-    }
-    return func_ptr;
-}
-
-#if !HAVE_SIGHANDLER_T
-#if HAVE___SIGHANDLER_T
-typedef __sighandler_t *sighandler_t;
-#else
-#error "Port me"
-#endif
-#endif
-sighandler_t signal(int signum, sighandler_t handler)
-{
-    typedef sighandler_t (*sighandler_func_t)(int, sighandler_t);
-
-    static sighandler_func_t orig = NULL;
-
-    if (ucs_debug_initialized && ucs_debug_is_error_signal(signum)) {
-        return SIG_DFL;
-    }
-
-    if (orig == NULL) {
-        orig = (sighandler_func_t)ucs_debug_get_orig_func("signal", signal);
-    }
-
-    return orig(signum, handler);
-}
-
-static int orig_sigaction(int signum, const struct sigaction *act,
-                          struct sigaction *oact)
-{
-    typedef int (*sigaction_func_t)(int, const struct sigaction*, struct sigaction*);
-
-    static sigaction_func_t orig = NULL;
-
-    if (orig == NULL) {
-        orig = (sigaction_func_t)ucs_debug_get_orig_func("sigaction", sigaction);
-    }
-
-    return orig(signum, act, oact);
-}
-
-int sigaction(int signum, const struct sigaction *act, struct sigaction *oact)
-{
-    if (ucs_debug_initialized && ucs_debug_is_error_signal(signum)) {
-        return orig_sigaction(signum, NULL, oact); /* Return old, do not set new */
-    }
-
-    return orig_sigaction(signum, act, oact);
-}
-
 static void ucs_debug_signal_handler(int signo)
 {
     ucs_log_flush();
@@ -1267,8 +1188,8 @@ static void ucs_set_signal_handler(void (*handler)(int, siginfo_t*, void *))
     sigemptyset(&sigact.sa_mask);
 
     for (i = 0; i < ucs_global_opts.error_signals.count; ++i) {
-        ret = orig_sigaction(ucs_global_opts.error_signals.signals[i], &sigact,
-                             &old_action);
+        ret = sigaction(ucs_global_opts.error_signals.signals[i], &sigact,
+                        &old_action);
         if (ret < 0) {
             ucs_warn("failed to set signal handler for sig %d : %m",
                      ucs_global_opts.error_signals.signals[i]);
@@ -1357,15 +1278,13 @@ void ucs_debug_init()
         memset(&sigact, 0, sizeof(sigact));
         memset(&old_action, 0, sizeof(old_action));
         sigact.sa_handler = ucs_debug_signal_handler;
-        orig_sigaction(ucs_global_opts.debug_signo, &sigact, &old_action);
+        sigaction(ucs_global_opts.debug_signo, &sigact, &old_action);
         ucs_debug_save_original_sighandler(ucs_global_opts.debug_signo, &old_action);
     }
 
 #ifdef HAVE_DETAILED_BACKTRACE
     bfd_init();
 #endif
-
-    ucs_debug_initialized = 1;
 }
 
 void ucs_debug_cleanup(int on_error)
@@ -1374,8 +1293,6 @@ void ucs_debug_cleanup(int on_error)
     int signum;
     struct sigaction *hndl;
     ucs_status_t status;
-
-    ucs_debug_initialized = 0;
 
     kh_foreach_key(&ucs_signal_orig_action_map, signum,
                    ucs_debug_disable_signal(signum));
@@ -1408,7 +1325,7 @@ static inline void ucs_debug_disable_signal_nolock(int signum)
     }
 
     original_action = kh_val(&ucs_signal_orig_action_map, hash_it);
-    ret = orig_sigaction(signum, original_action, &ucs_action);
+    ret = sigaction(signum, original_action, &ucs_action);
     if (ret < 0) {
         ucs_warn("failed to set signal handler for sig %d : %m", signum);
     }
