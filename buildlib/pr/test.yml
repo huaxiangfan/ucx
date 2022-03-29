@@ -13,7 +13,7 @@ jobs:
       - bash: |
           set -eEx
           ./autogen.sh
-          ./contrib/configure-devel --prefix=$(pwd)/install
+          ./contrib/configure-devel --prefix=$(pwd)/install --without-java
           make -j`nproc` install
         name: build
 
