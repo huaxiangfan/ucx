@@ -92,6 +92,7 @@ jobs:
             test_time: ${{ test.Value.duration }}
             test_intefrafe: ${{ test.Value.interface }}
             test_ucx_tls: ${{ test.Value.tls }}
+            test_extra_run_args: ${{ test.Value.extra_run_args }}
             initial_delay: ${{ coalesce(test.Value.initial_delay, parameters.initial_delay) }}
       maxParallel: 1
 
@@ -120,5 +121,6 @@ jobs:
           roce_iface: $(test_intefrafe)
           iodemo_tls: $(test_ucx_tls)
           initial_delay: $(initial_delay)
+          extra_run_args: $(test_extra_run_args)
           ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
             analyzer_allow_list_args: '--allow_list $(System.PullRequest.TargetBranch)'
