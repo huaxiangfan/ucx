@@ -154,7 +154,8 @@ unsigned ucp_ep_init_flags(const ucp_worker_h worker,
 ucs_status_t
 ucp_wireup_connect_local(ucp_ep_h ep,
                          const ucp_unpacked_address_t *remote_address,
-                         const ucp_lane_index_t *lanes2remote,
-                         int *num_eps_connected_p);
+                         const ucp_lane_index_t *lanes2remote);
+
+void ucp_wireup_pending_purge_cb(uct_pending_req_t *self, void *arg);
 
 #endif
