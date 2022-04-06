@@ -35,6 +35,22 @@ parameters:
         interface: $(roce_iface_cx6)
         tls: "rc_x"
         test_name: tag_umemh_cx6_rc
+      "server one path compatible on CX4":
+        args: ""
+        initial_delay: 9999 # No interference
+        duration: 120
+        interface: $(roce_iface_cx4)
+        tls: "rc_x"
+        extra_run_args: "--env server UCX_IB_NUM_PATHS=1 --env client UCX_IB_NUM_PATHS=2"
+        test_name: tag_cx4_rc_server_one_path
+      "client one path compatible on CX4":
+        args: ""
+        initial_delay: 9999 # No interference
+        duration: 120
+        interface: $(roce_iface_cx4)
+        tls: "rc_x"
+        extra_run_args: "--env server UCX_IB_NUM_PATHS=2 --env client UCX_IB_NUM_PATHS=1"
+        test_name: tag_cx4_rc_client_one_path
 
 jobs:
   - job: io_build

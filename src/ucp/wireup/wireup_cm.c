@@ -249,7 +249,6 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     ucp_worker_h worker                                = ucp_ep->worker;
     ucp_context_h context                              = worker->context;
     uct_ep_h uct_cm_ep                                 = ucp_ep_get_cm_uct_ep(ucp_ep);
-    int num_eps_connected                              = 0;
     ucp_wireup_ep_t *wireup_ep;
     ucp_unpacked_address_t addr;
     uint64_t tl_bitmap;
@@ -306,7 +305,7 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
         goto out_unblock;
     }
 
-    status = ucp_wireup_connect_local(ucp_ep, &addr, NULL, &num_eps_connected);
+    status = ucp_wireup_connect_local(ucp_ep, &addr, NULL);
     if (status != UCS_OK) {
         goto out_unblock;
     }
@@ -659,9 +658,6 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
 {
     uint64_t tl_bitmap = ucp_context_dev_tl_bitmap(worker->context,
                                                    conn_request->dev_name);
-    int num_remote_ep_addrs = 0;
-    int num_eps_connected   = 0;
-    const ucp_address_entry_t *address;
     ucp_ep_h ep;
     ucs_status_t status;
     char client_addr_str[UCS_SOCKADDR_STRING_LEN];
@@ -675,10 +671,6 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
         return UCS_ERR_UNREACHABLE;
     }
 
-    ucp_unpacked_address_for_each(address, remote_addr) {
-        num_remote_ep_addrs += address->num_ep_addrs;
-    }
-
     /* Create and connect TL part */
     status = ucp_ep_create_to_worker_addr(worker, tl_bitmap, remote_addr,
                                           ep_init_flags,
@@ -687,18 +679,10 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
         return status;
     }
 
-    status = ucp_wireup_connect_local(ep, remote_addr, NULL, &num_eps_connected);
+    status = ucp_wireup_connect_local(ep, remote_addr, NULL);
     if (status != UCS_OK) {
         ucp_ep_destroy_internal(ep);
         return status;
-    }
-
-    if (num_remote_ep_addrs > num_eps_connected) {
-        ucs_error("server received more remote endpoint addresses (%d) than it "
-                  "can connect to (%d)",
-                 num_remote_ep_addrs, num_eps_connected);
-        ucp_ep_destroy_internal(ep);
-        return UCS_ERR_SOME_CONNECTS_FAILED;
     }
 
     status = ucp_ep_cm_connect_server_lane(ep, conn_request);
